@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Global English Atlas</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  --bg: #f4f6fa;
+  --panel: #ffffff;
+  --text: #16202e;
+  --muted: #8a93a3;
+  --accent: #2f6df0;
+  --accent2: #6b9bff;
+  --country: #d2dae6;
+  --country-border: #ffffff;
+  --active: #8fb4f5;
+  --active-hover: #2f6df0;
+  --selected: #1c4fd0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--bg);
+  font-family: 'DM Sans', sans-serif;
+  color: var(--text);
+  height: 100vh;
+  width: 100vw;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* MAP */
+
+#map-container {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.7s cubic-bezier(0.77,0,0.175,1);
+  z-index: 1;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* COUNTRIES */
+
+.country {
+  fill: var(--country);
+  stroke: var(--country-border);
+  stroke-width: 0.5px;
+  transition: filter 0.2s;
+  cursor: default;
+}
+
+@keyframes countryPulse {
+  0%, 100% { fill: #8fb4f5; }
+  50%      { fill: #b9d2fa; }
+}
+
+.country.active {
+  cursor: pointer;
+  animation: countryPulse 2.8s ease-in-out infinite;
+}
+
+.country.active:hover {
+  animation: none;
+  fill: var(--active-hover);
+  filter: drop-shadow(0 0 6px rgba(47,109,240,0.5));
+}
+
+.country.active.selected,
+.country.selected {
+  animation: none;
+  fill: var(--selected);
+  filter: drop-shadow(0 0 10px rgba(47,109,240,0.6));
+}
+
+.region {
+  stroke: #0c0c0e;
+  stroke-width: 1px;
+  cursor: pointer;
+  transition: fill 0.2s, filter 0.2s;
+}
+
+.region:hover {
+  fill: var(--active-hover);
+  filter: drop-shadow(0 0 5px rgba(232,114,58,0.5));
+}
+
+.region.selected {
+  fill: var(--selected);
+  filter: drop-shadow(0 0 10px rgba(244,181,106,0.8));
+}
+
+
+/* BRAND */
+
+.brand {
+  position: fixed;
+  top: 28px;
+  left: 30px;
+  z-index: 200;
+  user-select: none;
+  pointer-events: none;
+}
+
+.brand h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.brand h1 span { color: var(--accent); }
+
+.brand p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 300;
+  letter-spacing: 0.5px;
+}
+
+
+#legend {
+  position: fixed;
+  bottom: 24px;
+  left: 30px;
+  z-index: 200;
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 14px;
+  padding: 14px 16px;
+  max-height: 42vh;
+  overflow-y: auto;
+  width: 180px;
+}
+#legend-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.legend-item {
+  font-size: 13px;
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.legend-item:hover {
+  background: rgba(47,109,240,0.1);
+  color: var(--accent);
+}
+/* HINT */
+
+#hint {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  z-index: 200;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+
+/* BACK BUTTON */
+
+#back-btn {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  background: rgba(232,114,58,0.12);
+  border: 1px solid rgba(232,114,58,0.3);
+  color: var(--accent2);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 20px;
+  border-radius: 50px;
+  cursor: pointer;
+  z-index: 300;
+  transition: all 0.25s;
+  letter-spacing: 0.3px;
+}
+
+#back-btn:hover {
+  background: rgba(232,114,58,0.22);
+  border-color: rgba(232,114,58,0.6);
+}
+
+#back-btn svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* INFO PANEL */
+
+#panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 25vw;
+  min-width: 300px;
+  height: 100vh;
+  background: var(--panel);
+  border-left: 1px solid rgba(0,0,0,0.08);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  padding: 42px 32px 36px;
+  transform: translateX(100%);
+  transition: transform 0.65s cubic-bezier(0.77,0,0.175,1);
+  overflow-y: auto;
+}
+
+#panel.open {
+  transform: translateX(0);
+}
+
+/* subtle vertical line accent */
+#panel::before {
+  content: "";
+  position: absolute;
+  top: 42px;
+  left: 32px;
+  width: 2px;
+  height: 40px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.panel-tag {
+  color: var(--accent);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  font-weight: 500;
+  padding-left: 14px;
+  margin-bottom: 18px;
+}
+
+#p-country {
+  font-family: 'Playfair Display', serif;
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.05;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+#p-accent {
+  font-size: 17px;
+  color: var(--accent2);
+  font-weight: 400;
+  margin-bottom: 22px;
+}
+
+.divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(0,0,0,0.08);
+  margin-bottom: 22px;
+}
+
+#p-description {
+  color: #44505f;
+  font-size: 14.5px;
+  line-height: 1.75;
+  font-weight: 300;
+}
+
+#p-audio-wrap {
+  margin-top: 18px;
+  padding: 14px 16px 14px;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.03);
+  border: 1px solid rgba(0,0,0,0.07);
+}
+
+#p-audio-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.play-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(47,109,240,0.5);
+  background: rgba(47,109,240,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+
+.play-btn:hover {
+  background: rgba(47,109,240,0.25);
+  border-color: rgba(47,109,240,0.8);
+  transform: scale(1.07);
+}
+
+.play-btn:active { transform: scale(0.96); }
+
+.play-btn svg { width: 14px; height: 14px; fill: #2f6df0; flex-shrink: 0; }
+.play-btn.playing svg.icon-play { display: none; }
+.play-btn:not(.playing) svg.icon-pause { display: none; }
+
+.progress-wrap { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+.progress-bar-bg {
+  width: 100%;
+  height: 3px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+}
+
+.progress-bar-fill {
+  height: 3px;
+  background: linear-gradient(90deg, #2f6df0, #6b9bff);
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.1s linear;
+  pointer-events: none;
+  position: relative;
+}
+
+.progress-bar-bg:hover .progress-handle { opacity: 1; transform: translateY(-50%) scale(1); }
+
+.progress-handle {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.6);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2f6df0;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+}
+
+.time-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
+#overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: 0.4s;
+}
+#overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+/* CLOSE BTN in panel */
+
+#panel-close {
+  position: absolute;
+  top: 22px;
+  right: 24px;
+  width: 30px;
+  height: 30px;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: var(--muted);
+}
+
+#panel-close:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+
+#panel-close svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* PULSE DOT */
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  margin-right: 8px;
+  animation: pulse 2s infinite;
+  vertical-align: middle;
+}
+
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(232,114,58,0.7); }
+  70%  { box-shadow: 0 0 0 12px rgba(232,114,58,0); }
+  100% { box-shadow: 0 0 0 0 rgba(232,114,58,0); }
+}
+
+/* FEATURE CHIPS */
+.features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.chip {
+  background: rgba(47,109,240,0.08);
+  border: 1px solid rgba(47,109,240,0.25);
+  color: #2f6df0;
+  font-size: 11.5px;
+  padding: 4px 11px;
+  border-radius: 20px;
+  font-weight: 400;
+}
+
+
+@media (max-width: 768px) {
+  /* панель на всю ширину снизу, а не сбоку */
+  #panel {
+    width: 100vw;
+    min-width: 0;
+    height: 75vh;
+    top: auto;
+    bottom: 0;
+    border-left: none;
+    border-top: 1px solid rgba(0,0,0,0.08);
+    border-radius: 20px 20px 0 0;
+    transform: translateY(100%);
+    padding: 32px 22px 28px;
+  }
+  #panel.open { transform: translateY(0); }
+  #panel::before { display: none; }
+
+  /* карта не сдвигается вбок на мобильном */
+  /* (нужна правка JS — см. ниже) */
+
+  #p-country { font-size: 30px; }
+
+  /* легенда компактнее и сворачиваемая */
+  #legend {
+    bottom: 14px;
+    left: 14px;
+    width: 140px;
+    max-height: 30vh;
+    padding: 10px 12px;
+  }
+
+  .brand h1 { font-size: 24px; }
+  #hint { font-size: 11px; padding: 0 10px; text-align: center; }
+}
+
+</style>
+</head>
+<body>
+
+<div class="brand">
+  <h1>English <span>Atlas</span></h1>
+  <p>Interactive world accents map</p>
+</div>
+
+<div id="legend">
+  <div id="legend-title">Accents</div>
+  <div id="legend-list"></div>
+</div>
+
+<div id="hint">Click highlighted countries to explore accents</div>
+
+<button id="back-btn">
+  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  Back to world map
+</button>
+
+<!-- INFO PANEL -->
+<div id="panel">
+  <div id="panel-close" title="Close">
+    <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </div>
+  <div class="panel-tag"><span class="pulse-dot"></span>Accent Info</div>
+  <div id="p-country">—</div>
+  <div id="p-accent">—</div>
+  <div class="divider"></div>
+  <div id="p-description">Select a country to explore its English accent.</div>
+  <div id="p-audio-wrap" style="display:none;">
+  <div id="p-audio-title">Audio sample</div>
+  <div class="player-row">
+    <button class="play-btn" id="p-play-btn" aria-label="Play/Pause">
+      <svg class="icon-play" viewBox="0 0 16 16"><path d="M4 2.5l9 5.5-9 5.5V2.5z"/></svg>
+      <svg class="icon-pause" viewBox="0 0 16 16"><rect x="3" y="2" width="4" height="12" rx="1.5"/><rect x="9" y="2" width="4" height="12" rx="1.5"/></svg>
+    </button>
+    <div class="progress-wrap">
+      <div class="progress-bar-bg" id="p-progress-bg">
+        <div class="progress-bar-fill" id="p-progress-fill">
+          <div class="progress-handle"></div>
+        </div>
+      </div>
+      <div class="time-row">
+        <span id="p-time-cur">0:00</span>
+        <span id="p-time-dur">—</span>
+      </div>
+    </div>
+  </div>
+  <audio id="p-audio" preload="none"></audio>
+</div>
+  <div class="features" id="p-features"></div>
+</div>
+
+<div id="map-container">
+  <svg id="map"></svg>
+</div>
+
+<script>
+
+const W = window.innerWidth;
+const H = window.innerHeight;
+
+const svg = d3.select("#map").attr("width", W).attr("height", H);
+const g = svg.append("g");
+const zoom = d3.zoom()
+  .scaleExtent([1, 12])              // от исходного масштаба до 12x
+  .on("zoom", (event) => {
+    g.attr("transform", event.transform);
+  });
+
+const mapContainer = document.getElementById("map-container");
+const panel = document.getElementById("panel");
+const hint = document.getElementById("hint");
+const backBtn = document.getElementById("back-btn");
+
+let currentView = "world";
+let panelOpen = false;
+
+/* ================================================
+   DATA
+================================================ */
+
+const activeCountries = {
+  566: "Nigeria",
+  404: "Kenya",
+  388: "Jamaica",
+  608: "Philippines",
+  76:  "Brazil",
+  112: "Belarus",
+  380: "Italy",
+  250: "France",
+  840: "United States of America",
+  826: "United Kingdom",
+  36:  "Australia",
+  372: "Ireland",
+  710: "South Africa",
+  124: "Canada",
+  356: "India",
+  554: "New Zealand"
+};
+
+const accentData = {
+  "United States of America": {
+    accent: "General American",
+    description: "The accent most commonly heard in American movies, television, and news broadcasts. It is rhotic — speakers pronounce the r clearly in all positions. A key feature is the flap t: when 't' appears between vowels, it sounds like a soft 'd' — so 'water' sounds like 'wadder' and 'city' like 'cidy'.",
+    features: ["Rhotic", "Flap T", "Non-nasal"],
+    audio: "audios/USA.mp3"
+  },
+  "United Kingdom": {
+    accent: "Multiple Regional Accents",
+    description: "Britain has extraordinary accent diversity. From the rolling Rs of the West Country to the melodic rise of Liverpool Scouse and the crisp clarity of RP — every region has its own distinct voice. Click to explore individual regions.",
+    features: ["Regional variety", "RP standard", "Non-rhotic"]
+  },
+  "Australia": {
+    accent: "General Australian",
+    description: "Australian English developed from British accents but evolved into its own unique form.Australians often shorten words and add endings such as -o or -ie. ( afternoon becomes arvo, barbecue becomes barbie.) The vowels are highly shifted compared with British English. Because of this, Australian speech can sound very different even though much of the vocabulary is the same.",
+    features: ["Vowel shift", "Word shortening", "Non-rhotic"],
+    audio: "audios/australia.mp3"
+  },
+  "Ireland": {
+    accent: "Irish English (Hiberno-English)",
+    description: "Irish English is shaped by Irish (Gaelic) influence and has a very recognizable rhythm and intonation. Many speakers are rhotic (they pronounce 'r'), and features can include a clear distinction between /t/ and /th/, plus expressive pitch movement. Vocabulary and phrasing can differ from British and American English while still being fully intelligible.",
+    features: ["Often rhotic", "Distinct intonation", "Gaelic influence"],
+    audio: "audios/ireland.mp3"
+  },
+  "South Africa": {
+    accent: "South African English",
+    description: "South African English includes several varieties influenced by British English, Afrikaans, and indigenous languages. Many speakers have very clear vowels and a distinctive rhythm; some vowel qualities can sound closer to certain Southern Hemisphere accents, but with their own recognizable patterns. Local vocabulary and pronunciation reflect the country’s multilingual setting.",
+    features: ["Distinct vowels", "Multilingual influence", "Regional variety"],
+    audio: "audios/SA.mp3"
+  },
+  "Canada": {
+    accent: "Canadian English",
+    description: "Canadian English is very similar to American English, but has unique features. The most famous is Canadian Raising — in words like 'about' and 'house', the vowel shifts before voiceless consonants, which is why some people hear 'aboot'. Canadian accents are generally softer than many American regional accents.",
+    features: ["Canadian Raising", "Rhotic", "Soft intonation"],
+    audio: "audios/canada.mp3"
+  },
+  "India": {
+    accent: "Indian English",
+    description: "Indian English is syllable-timed rather than stress-timed like British or American English. This gives it a distinctive rhythmic quality. Consonants are often pronounced very precisely, and retroflex sounds (made with the tongue curled back) are common, reflecting influence from native Indian languages.",
+    features: ["Syllable-timed", "Retroflex R", "Precise consonants"],
+    audio: "audios/india.mp3"
+  },
+  "New Zealand": {
+    accent: "New Zealand English",
+    description: "Closely related to Australian English but with its own recognizable vowel system. The short 'i' sound is especially distinctive and may sound close to a short 'u' — so 'fish and chips' is jokingly represented as 'fush and chups'. The accent is softer and often less nasal than Australian English.",
+    features: ["Vowel shifts", "Non-rhotic", "Soft delivery"],
+    audio: "audios/NZ.mp3"
+  },
+  "Nigeria": {
+  accent: "Nigerian English",
+  description: "Nigerian English is influenced by the country's major languages — Yoruba, Igbo, and Hausa. It is syllable-timed, giving speech a steady, even rhythm very different from British or American stress patterns. Consonants are pronounced clearly and precisely, and the 'r' is often strongly articulated. Tone and intonation are expressive and varied, reflecting the tonal nature of many Nigerian languages.",
+  features: ["Syllable-timed", "Strong R", "Tonal influence"],
+  audio: "audios/nigeria.mp3"
+},
+"Kenya": {
+  accent: "Kenyan English",
+  description: "Kenyan English is shaped by Swahili and other local languages. It has a clear, musical quality with even syllable timing. Vowels are pure and open, consonants are crisp, and intonation often rises at the end of phrases. The accent is widely considered very clear and easy to understand, and is increasingly influential across East Africa.",
+  features: ["Syllable-timed", "Swahili influence", "Musical intonation"],
+  audio: "audios/kenya.mp3"
+},
+"Jamaica": {
+  accent: "Jamaican English",
+  description: "Jamaican English sits on a spectrum between Standard Jamaican English and Jamaican Patois (Creole). Even standard speech carries a distinctive rhythm influenced by West African languages and British colonial English. Vowels are rich and open, intonation is lively and expressive, and the accent has had an enormous influence on global music and culture through reggae and dancehall.",
+  features: ["Creole influence", "Expressive rhythm", "Open vowels"],
+  audio: "audios/jamaica.mp3"
+},
+"Philippines": {
+  accent: "Philippine English",
+  description: "Philippine English developed under American colonial influence and is one of the most widely spoken varieties in Asia. It is syllable-timed with clearly pronounced consonants. A distinctive feature is the pronunciation of 'f' and 'p' — in some speakers these can overlap. Vowels are clear and open, and intonation patterns reflect influence from Filipino and other local languages.",
+  features: ["American influence", "Syllable-timed", "Clear consonants"],
+  audio:"audios/philipines.mp3"
+},
+"Brazil": {
+  accent: "Brazilian Accent in English",
+  description: "Brazilian speakers carry strong Portuguese phonology into English. Vowels are often added after final consonants — so 'contact' may sound like 'contachi'. The 'r' at the start of words sounds like a soft 'h', and the letter 't' before 'i' sounds often shifts toward 'ch'. The rhythm is syllable-timed and speech has a warm, musical quality that reflects Portuguese's flowing cadence.",
+  features: ["Final vowel addition", "H-like R", "Musical rhythm"],
+  audio: "audios/brazil.mp3"
+},
+"Belarus": {
+  accent: "Belarusian Accent in English",
+  description: "Belarusian speakers bring a distinct Slavic character to English. Vowel reduction — so natural in Belarusian and Russian — often disappears, giving each syllable equal weight. The 'th' sound is typically replaced by 'd' or 'z', so 'this' sounds like 'dis' and 'think' like 'zink'. Consonants are pronounced very precisely, and the voice often carries a flatter, more even intonation compared to native English speakers.",
+  features: ["TH-substitution", "Precise consonants", "Flat intonation"],
+  audio: "audios/belarus.mp3"
+},
+"Italy": {
+  accent: "Italian Accent in English",
+  description: "Italian speakers bring their language's open vowels and musical rhythm to English. Consonants are often doubled or emphasised, and vowels are added after words ending in consonants — so 'film' may become 'filma'. The intonation rises and falls expressively, and stress patterns reflect Italian rather than English rules. The overall effect is warm, expressive, and immediately recognizable.",
+  features: ["Open vowels", "Expressive intonation", "Final vowel addition"],
+  audio: "audios/italy.mp3"
+},
+"France": {
+  accent: "French Accent in English",
+  description: "French speakers carry several distinctive features into English. The 'h' is typically silent — 'happy' begins with a vowel sound. The 'th' sound becomes 'z' or 's', so 'the' sounds like 'ze' and 'think' like 'sink'. French is syllable-timed, so English spoken with a French accent loses the strong stress contrasts of native speech. Nasalised vowels and a characteristically smooth, even delivery complete the picture.",
+  features: ["Silent H", "TH-substitution", "Syllable-timed"],
+  audio: "audios/france.mp3"
+}
+};
+
+const ukRegionData = {
+  "RP": {
+    accent: "Received Pronunciation (RP)",
+    description: "Received Pronunciation, often called “BBC English” or “The Queen’s English,” is considered the standard form of British pronunciation. RP sounds very clear and controlled. Speakers usually pronounce consonants carefully and avoid strong regional features. One of the most noticeable characteristics is the non-rhotic r. This means the letter r is not pronounced at the end of words unless another vowel follows. ( car sounds more like “cah,” mother sounds like “muh-thuh.” )",
+    features: ["Non-rhotic R", "Clear consonants", "Standard / prestige"],
+    audio: "audios/RP.mp3"
+  },
+  "Essex": {
+    accent: "Essex",
+    description: "The Essex accent is a distinct Southern English dialect. Primarily influenced by working-class London migrations in the south and west, it blends with older East Anglian speech in the north and east. Dropping the 't' in the middle or end of words ( pronouncing \"butter\" as \"bu-er\" ) Pronouncing the \"th\" sound as an \"f\" or \"v\" ( \"think\" becomes \"fink\" and \"brother\" becomes \"bruvver\" ) Flattening \"ow\" sounds [aʊ] ( \"mouth\" sounds higher pitched, like \"mahf\" ). Dropping the starting 'h' on words ( \"house\" becomes \"ouse\" ) Changing \"tu\" or \"du\" sounds into \"chu\" or \"ju\" ( \"tune\" becomes \"choone\", \"tube\" becomes \"choob\" )",
+    features: ["T-dropping", "TH-fronting", "H-dropping"],
+    audio: "audios/essex.mp3"
+  },
+  "West Country": {
+    accent: "West Country",
+    description: "The West Country accent comes from the southwest of England, including counties such as Cornwall, Devon, and Somerset. It is one of the oldest English accents and keeps many traditional pronunciation features that disappeared in other regions. Unlike RP, the West Country accent is rhotic, meaning the r sound is always pronounced clearly. Words like farmer and car have a strong rolling r.",
+    features: ["Rhotic R", "Traditional features", "South West"],
+    audio: "audios/westcountry.mp3"
+  },
+  "Nottingham": {
+    accent: "Nottingham",
+    description: "The Nottingham accent belongs to the English Midlands region. It is less famous internationally, but it has several recognizable features. Speakers often use flatter intonation than southern English speakers, so their speech can sound more direct or less emotional. Vowel sounds are usually shorter, and some words are pronounced differently from RP. ( For example, bus and love may sound closer to “boos” and “luv.” )",
+    features: ["Flatter intonation", "Short vowels", "Midlands"],
+    audio: "audios/nottingham.mp3"
+  },
+  "Yorkshire": {
+    accent: "Yorkshire",
+    description: "The Yorkshire accent is one of the strongest northern English accents. One famous feature is the reduction of the word the into a short sound such as “t’.” ( the pub may sound like “t’pub.” ) Yorkshire speakers also tend to use short vowels. Words such as bath and grass have the short a sound instead of the long RP pronunciation. The accent is usually rhotic only in certain rural areas, but most modern Yorkshire accents do not pronounce r at the end of words.",
+    features: ["Short vowels", "“t’” for “the”", "Northern"],
+    audio: "audios/yorkshire.mp3"
+  },
+  "Scottish": {
+    accent: "Scottish",
+    description: "Scottish accents are usually rhotic, so the r sound is pronounced strongly. Vowel sounds are shorter and sharper than in RP. Words like goat and face may sound very different from southern English pronunciation. Some speakers roll or tap the r, especially in rural areas. Scottish speech often sounds rhythmic and powerful.",
+    features: ["Rhotic R", "Short vowels", "Rolled/tapped R"],
+    audio: "audios/scotland.mp3"
+  },
+  "Welsh": {
+    accent: "Welsh",
+    description: "The Welsh accent is heavily influenced by the Welsh language. It is often described as melodic or “singing” because of its musical intonation patterns.Welsh English speakers pronounce vowels very clearly, and consonants are softer than in some English accents. The rhythm of speech often rises and falls smoothly, making the accent sound expressive and warm.",
+    features: ["Melodic intonation", "Clear vowels", "Expressive rhythm"],
+    audio: "audios/wales.mp3"
+  },
+  "Ireland": {
+    accent: "Irish English (Hiberno-English)",
+    description: "Irish English is shaped by Irish (Gaelic) influence and has a very recognizable rhythm and intonation. Many speakers are rhotic (they pronounce 'r'), and features can include a clear distinction between /t/ and /th/, plus expressive pitch movement. Vocabulary and phrasing can differ from British and American English while still being fully intelligible.",
+    features: ["Often rhotic", "Distinct intonation", "Gaelic influence"],
+    audio: "audios/ireland.mp3"
+  },
+  "NI": {
+  accent: "Northern Irish (Ulster English)",
+  description: "Northern Irish (Ulster) English is quite distinct from the accent of the Republic of Ireland. It is strongly rhotic (the 'r' is pronounced in all positions), with sharply rising intonation at the end of phrases and a distinctive vowel quality — 'now' can sound closer to 'nye', and 'face' is noticeably diphthongised. The Belfast accent in particular is strong and rhythmic.",
+  features: ["Rhotic R", "Rising intonation", "Ulster vowels"],
+  audio: "audios/NI.mp3"
+},
+"Cockney": {
+  accent: "Cockney",
+  description: "Cockney is the traditional working-class accent of London. It is known for dropping the 'h' at the start of words ('house' becomes 'ouse'), replacing 'th' with 'f' or 'v' ('think' becomes 'fink', 'brother' becomes 'bruvver'), and glottalising 't' in the middle and end of words ('butter' becomes 'bu-er'). The vowels are heavily shifted and the intonation is lively and expressive. It is one of the most recognizable accents in the world.",
+  features: ["H-dropping", "TH-fronting", "Glottal T"],
+  audio: "audios/cockney.mp3"
+},
+"Scouse": {
+  accent: "Scouse (Liverpool)",
+  description: "Scouse is the accent of Liverpool and Merseyside, one of the most recognizable in Britain. It developed under strong influence from Irish and Welsh migrants. It has a distinctive melodic, almost 'sing-song' intonation with marked rises and falls. The 'k' sound is often softened into a fricative (so 'back' is pronounced with a breathy quality), and 'th' frequently shifts to 't' or 'd'.",
+  features: ["Melodic intonation", "Softened K", "Irish influence"],
+  audio: "audios/scouse.mp3"
+}
+};
+
+
+/* ================================================
+   PANEL
+================================================ */
+
+function openPanel(country, accent, description, features = [], audioUrl = null) {
+  document.getElementById("p-country").textContent = country;
+  document.getElementById("p-accent").textContent = accent;
+  document.getElementById("p-description").textContent = description;
+
+const audioWrap = document.getElementById("p-audio-wrap");
+  const audioEl = document.getElementById("p-audio");
+  audioEl.pause();
+  audioEl.removeAttribute("src");
+  audioEl.load();
+
+  // --- сброс визуала плеера ---
+  document.getElementById("p-progress-fill").style.width = "0%";
+  document.getElementById("p-time-cur").textContent = "0:00";
+  document.getElementById("p-time-dur").textContent = "—";
+  document.getElementById("p-play-btn").classList.remove("playing");
+  // ----------------------------
+
+  if (audioUrl) {
+    audioWrap.style.display = "block";
+    audioEl.setAttribute("src", audioUrl);
+    audioEl.load();
+  } else {
+    audioWrap.style.display = "none";
+  }
+
+  const fc = document.getElementById("p-features");
+  fc.innerHTML = "";
+  features.forEach(f => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = f;
+    fc.appendChild(chip);
+  });
+
+  panel.classList.add("open");
+  panelOpen = true;
+  // shift map left
+  const panelW = panel.offsetWidth;
+  mapContainer.style.transform = `translateX(-${panelW / 2}px)`;
+}
+
+function closePanel() {
+  panel.classList.remove("open");
+  panelOpen = false;
+  mapContainer.style.transform = "translateX(0)";
+  const audioEl = document.getElementById("p-audio");
+  audioEl.pause();
+
+  g.selectAll(".selected").classed("selected", false);
+}
+
+document.getElementById("panel-close").addEventListener("click", closePanel);
+
+/* ================================================
+   ZOOM UTILITY
+================================================ */
+
+function zoomToFeature(featureOrCollection, onDone) {
+  const bounds = path.bounds(featureOrCollection);
+  const dx = bounds[1][0] - bounds[0][0];
+  const dy = bounds[1][1] - bounds[0][1];
+  const cx = (bounds[0][0] + bounds[1][0]) / 2;
+  const cy = (bounds[0][1] + bounds[1][1]) / 2;
+  const scale = Math.max(0.5, Math.min(12, 0.88 / Math.max(dx / W, dy / H)));
+  const translate = [W / 2 - scale * cx, H / 2 - scale * cy];
+
+  g.transition()
+    .duration(900)
+    .ease(d3.easeCubicInOut)
+    .attr("transform", `translate(${translate})scale(${scale})`)
+    .on("end", () => { if (onDone) onDone(); });
+}
+
+/* ================================================
+   PROJECTIONS
+================================================ */
+
+const projection = d3.geoNaturalEarth1()
+  .scale(W / 6.8)
+  .translate([W / 2, H / 2]);
+
+const path = d3.geoPath().projection(projection);
+
+/* ================================================
+   WORLD MAP
+================================================ */
+
+function loadWorld() {
+  currentView = "world";
+  closePanel();
+  hint.style.opacity = "1";
+  backBtn.style.display = "none";
+
+  svg.call(zoom.transform, d3.zoomIdentity);  // сброс зума в исходное
+  svg.on(".zoom", null);                        // временно снять обработчик
+
+  g.transition().duration(700).ease(d3.easeCubicInOut)
+    .attr("transform", "translate(0)scale(1)")
+    .on("end", () => {
+      g.selectAll("*").remove();
+      drawWorld();   // drawWorld снова навесит zoom
+    });
+}
+
+function buildLegend() {
+  const list = document.getElementById("legend-list");
+  list.innerHTML = "";
+  Object.keys(accentData).forEach(name => {
+    const item = document.createElement("div");
+    item.className = "legend-item";
+    item.textContent = name === "United States of America" ? "United States" : name;
+    item.addEventListener("click", () => {
+      const data = accentData[name];
+      // снять прошлую подсветку, подсветить нужную страну на карте (если она есть)
+      g.selectAll(".selected").classed("selected", false);
+      g.selectAll("path.country").filter(d => activeCountries[+d.id] === name)
+        .classed("selected", true);
+      hint.style.opacity = "0";
+      openPanel(name, data.accent, data.description, data.features, data.audio);
+    });
+    list.appendChild(item);
+  });
+}
+buildLegend();
+
+function drawWorld() {
+  d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+    .then(topology => {
+      const countries = topojson.feature(topology, topology.objects.countries);
+
+      g.selectAll("path.country")
+        .data(countries.features)
+        .join("path")
+        .attr("class", d => activeCountries[+d.id] ? "country active" : "country")
+        .attr("d", path)
+        .on("click", (event, d) => {
+          const name = activeCountries[+d.id];
+          if (!name) return;
+          hint.style.opacity = "0";
+
+          g.selectAll("path.country.selected").classed("selected", false);
+          d3.select(event.currentTarget).classed("selected", true);
+
+          const data = accentData[name];
+          openPanel(name, data.accent, data.description, data.features, data.audio);
+
+          if (name === "United Kingdom" || name === "Ireland") {
+            backBtn.style.display = "flex";
+            // zoom to UK + Ireland, then show accents view
+            d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+              .then(worldGeo => {
+                const bi = {
+                  type: "FeatureCollection",
+                  features: worldGeo.features.filter(f =>
+                    f.properties && (f.properties.name === "United Kingdom" || f.properties.name === "Ireland")
+                  )
+                };
+                zoomToFeature(bi, () => loadBritishIslesAccents());
+              })
+              .catch(() => {
+                // fallback: zoom to clicked country only
+                zoomToFeature(d, () => loadBritishIslesAccents());
+              });
+          }
+        });
+        svg.call(zoom);
+svg.on("dblclick.zoom", null);  // отключаем зум по двойному клику (опционально)
+    });
+}
+
+/* ================================================
+   BRITISH ISLES ACCENTS (UK + IRELAND)
+================================================ */
+
+function loadBritishIslesAccents() {
+  currentView = "uk";
+  g.selectAll("*").remove();
+
+  g.attr("transform", "translate(0)scale(1)");
+
+  function normName(s) {
+    return String(s || "").trim().toLowerCase();
+  }
+
+  // Build accent regions by merging *real* county/UA polygons from TopoJSON.
+  // This avoids tiny hover regions and gives clean, real boundaries for each accent zone.
+  Promise.all([
+    d3.json("https://raw.githubusercontent.com/ONSvisual/topojson_boundaries/master/geogUACounty2019GB.json"),
+    d3.json("https://raw.githubusercontent.com/ONSvisual/topojson_boundaries/master/geogUKregion.json"),
+    d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson"),
+    d3.json("https://raw.githubusercontent.com/gist/carsonfarmer/9791524/raw/b27ca0d78d46a84664fe7ef709eed4f7621f7a25/irish-counties.topojson")
+  ])
+    .then(([gbTopo, ukRegionTopo, worldGeo, ieTopo]) => {
+      // Colors (harmonious, readable in your theme)
+      const zoneColors = {
+  "Scottish":    "#3b6ea5",   // синий
+  "Welsh":       "#4ca89a",   // бирюзовый
+  "NI":          "#7d6bb0",   // фиолетовый
+  "Yorkshire":   "#d98b54",   // тёплый охристый (контраст)
+  "Scouse":      "#5fa8d3",   // голубой
+  "Nottingham":  "#6aae6a",   // зелёный
+  "West Country":"#c75b6a",   // приглушённый красный
+  "RP":          "#4858a8",   // индиго
+  "Cockney":     "#8fb339",   // оливковый
+  "Essex":       "#e0b04a",   // золотистый
+  "Ireland":     "#3a8f6f"    // изумрудный
+};
+
+      function countyToAccentZone(countyOrUAName) {
+        const n = normName(countyOrUAName);
+        // Scotland
+        if (n.includes("scotland") || ["highland","orkney islands","shetland islands","na h-eileanan siar","argyll and bute","moray","aberdeenshire","perth and kinross","glasgow city","city of edinburgh","fife","dundee city","aberdeen city","scottish borders","dumfries and galloway","renfrewshire","east renfrewshire","inverclyde","stirling","north lanarkshire","south lanarkshire","east lothian","west lothian","clackmannanshire","angus","east ayrshire","north ayrshire","south ayrshire"].includes(n)) {
+          return "Scottish";
+        }
+
+        // Wales UAs
+        if (["cardiff","swansea","newport","gwynedd","powys","ceredigion","conwy","flintshire","wrexham","denbighshire","pembrokeshire","carmarthenshire","bridgend","caerphilly","monmouthshire","anglesey","isle of anglesey","rhondda cynon taf","vale of glamorgan","torfaen","blaenau gwent","merthyr tydfil","neath port talbot"].includes(n)) return "Welsh";
+
+        // England: West Country
+        if (["cornwall","devon","dorset","somerset","bristol","gloucestershire","wiltshire","bath and north east somerset","north somerset","south gloucestershire"].includes(n)) return "West Country";
+
+        // Essex (separate from general "RP south")
+        if (["essex","thurrock","southend-on-sea"].includes(n)) return "Essex";
+
+        // Scouse — all Merseyside boroughs
+        if (["knowsley","liverpool","sefton","st. helens","wirral","halton"].includes(n)) return "Scouse";
+
+
+        // Cockney — all London boroughs
+        if (["barking and dagenham","barnet","bexley","brent","bromley","camden",
+            "city of london","croydon","ealing","enfield","greenwich","hackney",
+            "hammersmith and fulham","haringey","harrow","havering","hillingdon",
+            "hounslow","islington","kensington and chelsea","kingston upon thames",
+            "lambeth","lewisham","merton","newham","redbridge","richmond upon thames",
+            "southwark","sutton","tower hamlets","waltham forest","wandsworth",
+            "westminster"].includes(n)) return "Cockney";
+
+        // Yorkshire
+        if (["west yorkshire","north yorkshire","south yorkshire","east riding of yorkshire","kingston upon hull"].includes(n) || n.includes("yorkshire")) return "Yorkshire";
+
+        // Nottingham
+        if (["nottinghamshire","nottingham"].includes(n)) return "Nottingham";
+
+        // RP (broad South East / standard-ish zone)
+        if (["kent","surrey","east sussex","west sussex","hampshire","berkshire","buckinghamshire","oxfordshire","isle of wight","brighton and hove","portsmouth","southampton","milton keynes","reading","slough","bracknell forest","windsor and maidenhead","wokingham","cambridgeshire","bedfordshire","hertfordshire","norfolk","suffolk","peterborough","luton"].includes(n)) return "RP";
+
+        // Default England → RP (keeps map filled; we can refine later)
+        return "RP";
+      }
+
+      // --- GB counties/UAs ---
+      const gbObjKey = Object.keys(gbTopo.objects || {})[0];
+      const gbGeoms = gbTopo.objects[gbObjKey].geometries;
+
+      const zoneToGeoms = new Map();
+      for (const geom of gbGeoms) {
+        const nm = geom.properties?.AREANM || geom.properties?.name || geom.properties?.NAME;
+        const zone = countyToAccentZone(nm);
+        if (!zoneToGeoms.has(zone)) zoneToGeoms.set(zone, []);
+        zoneToGeoms.get(zone).push(geom);
+      }
+
+      // Create merged geometries per zone (TopoJSON merge preserves borders perfectly)
+      const zoneFeatures = [];
+      for (const [zone, geoms] of zoneToGeoms.entries()) {
+        const merged = topojson.merge(gbTopo, geoms);
+        zoneFeatures.push({
+          type: "Feature",
+          properties: { zoneName: zone, displayName: zone },
+          geometry: merged
+        });
+      }
+
+
+      // --- Republic of Ireland counties (real boundaries) ---
+      try {
+        const ieObjKey = Object.keys(ieTopo.objects || {})[0];
+        const ieGeoms = ieTopo.objects[ieObjKey]?.geometries || [];
+
+      if (ieGeoms.length) {
+      zoneFeatures.push({
+    type: "Feature",
+    properties: { zoneName: "Ireland", displayName: "Ireland" },
+    geometry: topojson.merge(ieTopo, ieGeoms)
+  });
+        } else {
+  // fallback: outline from world geojson
+  const ieFeat = worldGeo.features.find(f => f.properties && f.properties.name === "Ireland");
+  if (ieFeat) zoneFeatures.push({ type: "Feature", properties: { zoneName: "Ireland", displayName: "Ireland" }, geometry: ieFeat.geometry });
+}
+      } catch (e) {
+        const ieFeat = worldGeo.features.find(f => f.properties && f.properties.name === "Ireland");
+        if (ieFeat) zoneFeatures.push({ type: "Feature", properties: { zoneName: "Ireland", displayName: "Ireland" }, geometry: ieFeat.geometry });
+      }
+            // --- Northern Ireland outline from UK regions topojson ---
+      const ukObjKey = ukRegionTopo.objects?.UKregionmerc ? "UKregionmerc" : Object.keys(ukRegionTopo.objects || {})[0];
+      const ukRegions = topojson.feature(ukRegionTopo, ukRegionTopo.objects[ukObjKey]);
+      const niFeat = ukRegions.features.find(f => f.properties && f.properties.AREANM === "Northern Ireland");
+      if (niFeat) {
+        zoneFeatures.push({
+          type: "Feature",
+          properties: { zoneName: "NI", displayName: "NI" },
+          geometry: niFeat.geometry
+        });
+      }
+
+
+      const fc = { type: "FeatureCollection", features: zoneFeatures };
+      const proj = d3.geoMercator().fitSize([W * 0.92, H * 0.92], fc);
+      const p = d3.geoPath().projection(proj);
+
+      const regionG = g.append("g");
+      regionG.selectAll("path.region")
+        .data(fc.features)
+        .join("path")
+        .attr("class", "region")
+        .attr("d", p)
+        .attr("fill", d => zoneColors[d.properties.zoneName] || "#5c2d10")
+        .style("opacity", 0.92)
+        .style("stroke", "rgba(255,255,255,0.85)")
+        .style("stroke-width", "1px")
+        .style("filter", "none")
+        .on("click", (event, d) => {
+          const zoneName = d.properties.zoneName;
+          const info = ukRegionData[zoneName] || ukRegionData["Ireland"];
+          if (!info) return;
+          regionG.selectAll("path.region.selected").classed("selected", false);
+          d3.select(event.currentTarget).classed("selected", true);
+          openPanel(zoneName, info.accent, info.description, info.features, info.audio);
+        });
+    })
+    .catch(() => {
+      openPanel("British Isles", "Accents", "Failed to load detailed British Isles boundaries.", []);
+    });
+}
+
+/* ================================================
+   AUSTRALIA STATES
+================================================ */
+
+function loadAuStates() {
+  currentView = "au";
+
+  d3.json("https://raw.githubusercontent.com/rowanhogan/australian-states/master/states.geojson")
+    .then(geo => {
+      g.selectAll("*").remove();
+
+      const auProjection = d3.geoMercator().fitSize([W * 0.85, H * 0.85], geo);
+      const auPath = d3.geoPath().projection(auProjection);
+
+      const bounds = auPath.bounds(geo);
+      const dx = bounds[1][0] - bounds[0][0];
+      const dy = bounds[1][1] - bounds[0][1];
+      const cx = (bounds[0][0] + bounds[1][0]) / 2;
+      const cy = (bounds[0][1] + bounds[1][1]) / 2;
+      const scale = Math.max(0.5, Math.min(20, 0.82 / Math.max(dx / (W * 0.85), dy / (H * 0.85))));
+      const translate = [W / 2 - scale * cx, H / 2 - scale * cy];
+
+      g.attr("transform", "translate(0)scale(1)");
+
+      g.selectAll("path.region")
+        .data(geo.features)
+        .join("path")
+        .attr("class", "region")
+        .attr("d", auPath)
+        .attr("transform", `translate(${translate})scale(${scale})`)
+        .style("stroke-width", `${1 / scale}px`)
+        .on("click", (event, d) => {
+          const name = d.properties.STATE_NAME || d.properties.name || d.properties.Name;
+          let info = auStateData[name];
+          if (!info) {
+            const key = Object.keys(auStateData).find(k => name && name.includes(k.split(" ")[0]));
+            info = key ? auStateData[key] : null;
+          }
+          if (!info) {
+            // fallback generic
+            openPanel(name || "Australia", "Australian English", "A variety of Australian English with local characteristics.", ["General Australian"], null);
+            return;
+          }
+
+          g.selectAll("path.region.selected").classed("selected", false);
+          d3.select(event.currentTarget).classed("selected", true);
+
+          openPanel(name, info.accent, info.description, info.features, info.audio);
+        });
+    })
+    .catch(() => {
+      // fallback: single outline
+      d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+        .then(data => {
+          const aus = {
+            type: "FeatureCollection",
+            features: data.features.filter(d => d.properties.name === "Australia")
+          };
+
+          g.selectAll("*").remove();
+          const auProjection = d3.geoMercator().fitSize([W, H], aus);
+          const auPath = d3.geoPath().projection(auProjection);
+          g.attr("transform", "translate(0)scale(1)");
+
+          g.selectAll("path.region")
+            .data(aus.features)
+            .join("path")
+            .attr("class", "region")
+            .attr("d", auPath)
+            .on("click", () => {
+              openPanel("Australia", "General Australian",
+                accentData["Australia"].description,
+                accentData["Australia"].features,
+                accentData["Australia"].audio);
+            });
+        });
+    });
+}
+
+(function() {
+  const playBtn = document.getElementById('p-play-btn');
+  const progressBg = document.getElementById('p-progress-bg');
+  const progressFill = document.getElementById('p-progress-fill');
+  const timeCur = document.getElementById('p-time-cur');
+  const timeDur = document.getElementById('p-time-dur');
+  const audioEl = document.getElementById('p-audio');
+
+  function fmt(s) {
+    s = Math.floor(s || 0);
+    return Math.floor(s/60) + ':' + (s%60 < 10 ? '0' : '') + s%60;
+  }
+
+  audioEl.addEventListener('loadedmetadata', () => {
+    timeDur.textContent = fmt(audioEl.duration);
+  });
+
+  audioEl.addEventListener('timeupdate', () => {
+    if (!audioEl.duration) return;
+    progressFill.style.width = (audioEl.currentTime / audioEl.duration * 100) + '%';
+    timeCur.textContent = fmt(audioEl.currentTime);
+  });
+
+  audioEl.addEventListener('ended', () => {
+    playBtn.classList.remove('playing');
+    progressFill.style.width = '0%';
+    timeCur.textContent = '0:00';
+  });
+
+  playBtn.addEventListener('click', () => {
+    if (audioEl.paused) {
+      audioEl.play();
+      playBtn.classList.add('playing');
+    } else {
+      audioEl.pause();
+      playBtn.classList.remove('playing');
+    }
+  });
+
+  progressBg.addEventListener('click', e => {
+    if (!audioEl.duration) return;
+    const rect = progressBg.getBoundingClientRect();
+    audioEl.currentTime = ((e.clientX - rect.left) / rect.width) * audioEl.duration;
+  });
+})();
+
+/* ================================================
+   BACK BUTTON
+================================================ */
+
+backBtn.addEventListener("click", () => {
+  loadWorld();
+});
+
+/* ================================================
+   START
+================================================ */
+
+drawWorld();
+
+// Larger click targets for tiny island countries
+const tinyCountries = [
+  { name: "Jamaica", coords: [-77.3, 18.1] }
+];
+
+tinyCountries.forEach(tc => {
+  const xy = projection(tc.coords);
+  if (!xy) return;
+  g.append("circle")
+    .attr("cx", xy[0])
+    .attr("cy", xy[1])
+    .attr("r", 10)                    // радиус кликабельной зоны
+    .attr("fill", "transparent")
+    .style("cursor", "pointer")
+    .on("click", () => {
+      hint.style.opacity = "0";
+      const data = accentData[tc.name];
+      openPanel(tc.name, data.accent, data.description, data.features, data.audio);
+    });
+});
+
+document.addEventListener("keydown", (e) => {
+  // Esc — закрыть панель
+  if (e.key === "Escape" && panelOpen) {
+    closePanel();
+    return;
+  }
+  // Пробел — play/pause (только если панель открыта и есть аудио)
+  if (e.code === "Space" && panelOpen) {
+    const audioWrap = document.getElementById("p-audio-wrap");
+    if (audioWrap.style.display === "none") return;  // нет аудио — ничего не делаем
+    e.preventDefault();  // чтобы пробел не скроллил страницу
+    document.getElementById("p-play-btn").click();   // переиспользуем существующую логику кнопки
+  }
+});
+
+</script>
+</body>
+</html>
